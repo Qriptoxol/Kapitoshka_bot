@@ -31,10 +31,13 @@ CACHE_TTL = 300
 def load_config_from_channel(bot):
     global _config_cache, _config_last_update
     file_id = get_setting(CONFIG_FILE_ID_KEY)
+    logger.info(f"📥 Получен file_id из БД: {file_id}")
+
     if file_id:
         try:
             file = bot.get_file(file_id)
             url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
+            logger.info(f"📥 Скачиваю конфиг по URL: {url}")
             resp = requests.get(url)
             if resp.status_code == 200:
                 config = json.loads(resp.text)
@@ -42,23 +45,34 @@ def load_config_from_channel(bot):
                 _config_last_update = datetime.now()
                 logger.info("✅ Конфиг загружен из канала.")
                 return config
+            else:
+                logger.error(f"❌ Ошибка скачивания: {resp.status_code}")
         except Exception as e:
-            logger.error(f"Ошибка загрузки конфига: {e}")
+            logger.error(f"❌ Ошибка загрузки конфига: {e}")
+    else:
+        logger.warning("⚠️ file_id отсутствует в БД.")
 
+    # Если не загрузился — создаём новый
     logger.warning("⚠️ Конфиг не найден. Создаю новый и отправляю в канал.")
     config = DEFAULT_CONFIG.copy()
-    sent = bot.send_document(
-        chat_id=STORAGE_CHANNEL_ID,
-        document=json.dumps(config, indent=2).encode('utf-8'),
-        filename="config.json",
-        caption="Конфиг бота (автосозданный)"
-    )
-    file_id = sent.document.file_id
-    set_setting(CONFIG_FILE_ID_KEY, file_id)
-    _config_cache = config
-    _config_last_update = datetime.now()
-    logger.info("✅ Конфиг сохранён в канале и file_id записан в БД.")
-    return config
+    try:
+        sent = bot.send_document(
+            chat_id=STORAGE_CHANNEL_ID,
+            document=json.dumps(config, indent=2).encode('utf-8'),
+            filename="config.json",
+            caption="Конфиг бота (автосозданный)"
+        )
+        file_id = sent.document.file_id
+        set_setting(CONFIG_FILE_ID_KEY, file_id)
+        _config_cache = config
+        _config_last_update = datetime.now()
+        logger.info("✅ Конфиг сохранён в канале и file_id записан в БД.")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при отправке конфига в канал: {e}")
+        # Даже если не отправилось, используем конфиг в памяти
+        _config_cache = config
+        _config_last_update = datetime.now()
+    return _config_cache
 
 def get_config(bot=None, force_reload=False):
     global _config_cache, _config_last_update
