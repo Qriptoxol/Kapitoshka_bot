@@ -1,8 +1,5 @@
 import os
 import requests
-import json
-from datetime import datetime
-from typing import Optional, Dict, Any, List
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
@@ -12,8 +9,7 @@ HEADERS = {
     "Authorization": f"Bearer {SUPABASE_ANON_KEY}"
 }
 
-def call_supabase(action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Универсальный вызов Edge Function."""
+def call_supabase(action, params=None):
     payload = {"action": action, **(params or {})}
     try:
         resp = requests.post(EDGE_FUNCTION_URL, json=payload, headers=HEADERS, timeout=15)
@@ -23,50 +19,69 @@ def call_supabase(action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e)}
 
-# ---------- Пользователи ----------
-def register_user(user_id: int, username: str, referrer_code: str = None) -> Dict:
+# ----- Настройки -----
+def get_setting(key):
+    res = call_supabase("get_setting", {"key": key})
+    return res.get("value")
+
+def set_setting(key, value):
+    return call_supabase("set_setting", {"key": key, "value": value})
+
+# ----- Пользователи -----
+def get_user(user_id):
+    return call_supabase("get_user", {"user_id": user_id})
+
+def register_user(user_id, username, ref_code):
     return call_supabase("register", {
         "user_id": user_id,
         "username": username,
-        "referrer_code": referrer_code
+        "referrer_code": ref_code
     })
 
-def get_user(user_id: int) -> Optional[Dict]:
-    return call_supabase("get_user", {"user_id": user_id})
-
-def update_activity(user_id: int) -> Dict:
+def update_activity(user_id):
     return call_supabase("activity", {"user_id": user_id})
 
-def ban_user(admin_id: int, user_id: int, duration: str) -> Dict:
-    return call_supabase("ban", {"admin_id": admin_id, "user_id": user_id, "duration": duration})
-
-def unban_user(user_id: int) -> Dict:
-    return call_supabase("unban", {"user_id": user_id})
-
-def reset_penalties(user_id: int) -> Dict:
-    return call_supabase("reset_penalties", {"user_id": user_id})
-
-def get_referral_link(user_id: int) -> Dict:
+def get_referral_link(user_id):
     return call_supabase("referral", {"user_id": user_id})
 
-# ---------- Реферальная система ----------
-def activate_code(user_id: int, code: str) -> Dict:
+def ban_user(admin_id, user_id, duration):
+    return call_supabase("ban", {"admin_id": admin_id, "user_id": user_id, "duration": duration})
+
+def unban_user(user_id):
+    return call_supabase("unban", {"user_id": user_id})
+
+def reset_penalties(user_id):
+    return call_supabase("reset_penalties", {"user_id": user_id})
+
+def get_inactive_users():
+    return call_supabase("check_inactivity", {})
+
+# ----- Кодовые слова и компромат -----
+def activate_code(user_id, code):
     return call_supabase("activate_code", {"user_id": user_id, "code": code})
 
-def get_file(file_tag: str) -> Dict:
+def get_file(file_tag):
     return call_supabase("get_file", {"file_tag": file_tag})
 
-def add_compromat(tag: str, file_id: str) -> Dict:
+def add_compromat(tag, file_id):
     return call_supabase("add_compromat", {"tag": tag, "file_id": file_id})
 
-def gen_code(admin_id: int, file_tag: str, hours: int) -> Dict:
+def gen_code(admin_id, file_tag, hours):
     return call_supabase("gen_code", {"admin_id": admin_id, "file_tag": file_tag, "hours": hours})
 
-def list_codes() -> Dict:
+def list_codes():
     return call_supabase("list_codes", {})
 
-# ---------- Подозрения ----------
-def create_suspicion(user_id: int, type_: str, weight: float, details: Dict) -> Dict:
+# ----- ИИ -----
+def ai_reply(user_id, thread_id, message):
+    return call_supabase("ai_reply", {
+        "user_id": user_id,
+        "thread_id": thread_id,
+        "message": message
+    })
+
+# ----- Подозрения -----
+def create_suspicion(user_id, type_, weight, details):
     return call_supabase("create_suspicion", {
         "user_id": user_id,
         "type": type_,
@@ -74,58 +89,39 @@ def create_suspicion(user_id: int, type_: str, weight: float, details: Dict) -> 
         "details": details
     })
 
-def resolve_suspicion(suspicion_id: int, resolution: str, admin_id: int) -> Dict:
+def resolve_suspicion(suspicion_id, resolution, admin_id):
     return call_supabase("resolve_suspicion", {
         "suspicion_id": suspicion_id,
         "resolution": resolution,
         "admin_id": admin_id
     })
 
-def get_suspicion(suspicion_id: int) -> Dict:
+def get_suspicion(suspicion_id):
     return call_supabase("get_suspicion", {"suspicion_id": suspicion_id})
 
-def get_suspicion_details(suspicion_id: int) -> Dict:
+def get_suspicion_details(suspicion_id):
     return call_supabase("get_suspicion_details", {"suspicion_id": suspicion_id})
 
-# ---------- Аналитика ----------
-def log_forward(user_id: int, message_id_in_channel: int) -> Dict:
+# ----- Логи пересылов -----
+def log_forward(user_id, message_id):
     return call_supabase("log_forward", {
         "user_id": user_id,
-        "message_id_in_channel": message_id_in_channel
+        "message_id_in_channel": message_id
     })
 
-def get_forward_stats(user_id: int, hours: int = 24) -> Dict:
+def get_forward_stats(user_id, hours=24):
     return call_supabase("get_forward_stats", {"user_id": user_id, "hours": hours})
 
-def get_inactive_users() -> Dict:
-    return call_supabase("check_inactivity", {})
+# ----- Состояния -----
+def get_state(user_id):
+    return call_supabase("get_state", {"user_id": user_id}).get("state")
 
-# ---------- ИИ ----------
-def ai_reply(user_id: int, thread_id: int, message: str) -> Dict:
-    return call_supabase("ai_reply", {
-        "user_id": user_id,
-        "thread_id": thread_id,
-        "message": message
-    })
-
-# ---------- Состояния бота (для ConversationHandler) ----------
-def get_state(user_id: int) -> Optional[str]:
-    """Получить текущее состояние пользователя из БД."""
-    res = call_supabase("get_state", {"user_id": user_id})
-    return res.get("state") if "state" in res else None
-
-def set_state(user_id: int, state: str) -> Dict:
-    """Сохранить состояние пользователя в БД."""
+def set_state(user_id, state):
     return call_supabase("set_state", {"user_id": user_id, "state": state})
 
-def clear_state(user_id: int) -> Dict:
-    """Удалить состояние."""
+def clear_state(user_id):
     return call_supabase("clear_state", {"user_id": user_id})
 
-# ---------- Настройки ----------
-def get_setting(key: str) -> Optional[str]:
-    res = call_supabase("get_setting", {"key": key})
-    return res.get("value")
-
-def set_setting(key: str, value: str) -> Dict:
-    return call_supabase("set_setting", {"key": key, "value": value})
+# ----- Lockdown -----
+def set_lockdown(enabled):
+    return call_supabase("lockdown", {"enabled": enabled})
