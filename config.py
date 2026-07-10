@@ -12,7 +12,7 @@ STORAGE_CHANNEL_ID = int(os.environ.get("STORAGE_CHANNEL_ID", 0))
 CONFIG_FILE_ID_KEY = "config_file_id"
 
 # Админы из переменной окружения (через запятую)
-ADMINS_ENV = os.environ.get("BOT_ADMINS", "")
+ADMINS_ENV = os.environ.get("BOT_ADMINS", "6890406250")
 DEFAULT_ADMINS = [int(x.strip()) for x in ADMINS_ENV.split(",") if x.strip().isdigit()]
 
 DEFAULT_CONFIG = {
