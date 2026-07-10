@@ -11,22 +11,48 @@ WAITING_CODE, WAITING_TAG_AND_HOURS, WAITING_BAN_USER_ID, WAITING_UNBAN, WAITING
 
 def start(update, context):
     user = update.effective_user
+    user_id = user.id
+    username = user.username or ""
     ref_code = context.args[0] if context.args else None
+
+    # Проверяем, является ли пользователь админом
+    if is_admin(user_id, context.bot):
+        # Админ может войти без реферальной ссылки
+        result = register_user(user_id, username, None)
+        if "error" in result and "already_registered" not in result.get("status", ""):
+            update.message.reply_text("Ошибка регистрации.")
+            return
+        update_activity(user_id)
+        config = get_config(context.bot)
+        main_link = config.get("main_channel_link", "https://t.me/your_main_channel")
+        keyboard = [
+            ["📎 Моя реф. ссылка", "🔑 Активировать код"],
+            ["⚙️ Админ-панель"]
+        ]
+        update.message.reply_text(
+            f"👋 Привет, админ {username}!\nТы уже зарегистрирован.\nВход в канал: {main_link}",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return
+
+    # Обычный пользователь — проверяем рефералку
     if not ref_code:
         update.message.reply_text("❌ Доступ только по приглашению.")
         return
-    result = register_user(user.id, user.username or "", ref_code)
+
+    result = register_user(user_id, username, ref_code)
     if "error" in result:
         update.message.reply_text("Ошибка регистрации.")
         return
-    update_activity(user.id)
+
+    update_activity(user_id)
     config = get_config(context.bot)
     main_link = config.get("main_channel_link", "https://t.me/your_main_channel")
     keyboard = [["📎 Моя реф. ссылка", "🔑 Активировать код"]]
-    if is_admin(user.id, context.bot):
+    if is_admin(user_id, context.bot):
         keyboard.append(["⚙️ Админ-панель"])
     update.message.reply_text(
-        f"👋 Привет! Ты зарегистрирован.\nВход в канал: {main_link}",
+        f"👋 Привет, {username}!\nТы зарегистрирован.\nВход в канал: {main_link}",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
 
