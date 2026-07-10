@@ -9,8 +9,12 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 STORAGE_CHANNEL_ID = int(os.environ.get("STORAGE_CHANNEL_ID", 0))
 CONFIG_FILE_ID_KEY = "config_file_id"
 
+# Получаем админов из переменной окружения (через запятую)
+ADMINS_ENV = os.environ.get("BOT_ADMINS", "6890406250")
+DEFAULT_ADMINS = [int(x.strip()) for x in ADMINS_ENV.split(",") if x.strip().isdigit()]
+
 DEFAULT_CONFIG = {
-    "admins": [],
+    "admins": DEFAULT_ADMINS,
     "forward_limit": 5,
     "forward_period_hours": 24,
     "text_threshold": 0.7,
@@ -52,8 +56,24 @@ async def load_config_from_channel(bot):
         except Exception as e:
             print(f"Ошибка загрузки конфига: {e}")
 
-    print("⚠️ Не удалось загрузить конфиг из канала. Использую DEFAULT_CONFIG.")
-    _config_cache = DEFAULT_CONFIG.copy()
+    # Если файла нет – создаём новый конфиг и отправляем в канал
+    print("⚠️ Конфиг не найден. Создаю новый и отправляю в канал.")
+    config = DEFAULT_CONFIG.copy()
+    # Отправляем в канал
+    try:
+        sent = await bot.send_document(
+            chat_id=STORAGE_CHANNEL_ID,
+            document=json.dumps(config, indent=2).encode('utf-8'),
+            filename="config.json",
+            caption="Конфиг бота (автосозданный)"
+        )
+        file_id = sent.document.file_id
+        await aset_setting(CONFIG_FILE_ID_KEY, file_id)
+        print(f"✅ Конфиг сохранён в канале с file_id: {file_id}")
+    except Exception as e:
+        print(f"❌ Не удалось отправить конфиг в канал: {e}")
+        # Продолжаем с дефолтным конфигом в памяти
+    _config_cache = config
     _config_last_update = datetime.now()
     return _config_cache
 
