@@ -3,7 +3,7 @@ import asyncio
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from config import load_config_from_channel, get_config
+from config import load_config_from_channel
 from handlers import (
     start, handle_menu_buttons, handle_text_input, handle_callback,
     handle_group_message, handle_document
@@ -15,8 +15,7 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 async def inactivity_checker(context):
-    """Проверяет неактивных пользователей и отправляет предупреждение."""
-    result = get_inactive_users()  # синхронная функция, можно оставить
+    result = get_inactive_users()
     if "inactive" in result:
         bot = context.bot
         for uid in result["inactive"]:
@@ -25,13 +24,17 @@ async def inactivity_checker(context):
             except Exception as e:
                 logging.error(f"Не удалось отправить предупреждение {uid}: {e}")
 
-async def main():
+async def init_app():
+    """Асинхронная инициализация приложения и загрузка конфига."""
     application = Application.builder().token(BOT_TOKEN).build()
-
-    # Загружаем конфиг при старте (асинхронно)
     await load_config_from_channel(application.bot)
+    return application
 
-    # Регистрируем обработчики
+def main():
+    # Инициализация приложения с загрузкой конфига
+    application = asyncio.run(init_app())
+
+    # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
@@ -57,7 +60,7 @@ async def main():
         job_queue.run_repeating(inactivity_checker, interval=86400, first=10)
 
     logging.info("Бот запущен в режиме polling...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
