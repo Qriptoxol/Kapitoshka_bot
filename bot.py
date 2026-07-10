@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -23,13 +24,13 @@ async def inactivity_checker(context):
             except Exception as e:
                 logging.error(f"Не удалось отправить предупреждение {uid}: {e}")
 
-async def main():
+def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Загружаем конфиг при старте
-    await load_config_from_channel(application.bot)
+    # Загружаем конфиг ДО запуска polling (синхронно через asyncio.run)
+    asyncio.run(load_config_from_channel(application.bot))
 
-    # Добавляем обработчики
+    # Обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
@@ -49,16 +50,15 @@ async def main():
         handle_document
     ))
 
-    # Фоновая задача – трекер бездействия (раз в 24 часа)
+    # JobQueue для трекера бездействия
     job_queue = application.job_queue
     if job_queue:
         job_queue.run_repeating(inactivity_checker, interval=86400, first=10)
     else:
-        logging.warning("JobQueue не доступен. Установите python-telegram-bot[job-queue]")
+        logging.warning("JobQueue не установлен. Установите python-telegram-bot[job-queue]")
 
     logging.info("Бот запущен в режиме polling...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
