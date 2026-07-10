@@ -1,64 +1,65 @@
 import os
-import asyncio
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+import threading
+import time
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 from config import load_config_from_channel
 from handlers import (
-    start, handle_menu_buttons, handle_text_input, handle_callback,
-    handle_group_message, handle_document
+    start, reload_config, handle_menu_buttons, handle_text_input,
+    handle_callback, handle_group_message, handle_document
 )
-from database import get_inactive_users
-from utils import send_inactive_warning
+from analytics import inactivity_checker
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-async def inactivity_checker(context):
-    result = get_inactive_users()
-    if "inactive" in result:
-        bot = context.bot
-        for uid in result["inactive"]:
-            try:
-                await send_inactive_warning(bot, uid)
-            except Exception as e:
-                logging.error(f"Не удалось отправить предупреждение {uid}: {e}")
+def start_inactivity_thread(bot):
+    def run():
+        while True:
+            time.sleep(86400)  # 24 часа
+            inactivity_checker(bot)
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
 
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
+    updater = Updater(token=BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+    bot = updater.bot
 
-    # Загружаем конфиг ДО запуска polling (синхронно через asyncio.run)
-    asyncio.run(load_config_from_channel(application.bot))
+    # Загружаем конфиг при старте
+    load_config_from_channel(bot)
 
-    # Обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+    # Регистрируем обработчики
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("reload_config", reload_config))
+
+    dp.add_handler(MessageHandler(
+        Filters.text & ~Filters.command & Filters.private,
         handle_menu_buttons
     ))
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+    dp.add_handler(MessageHandler(
+        Filters.text & ~Filters.command & Filters.private,
         handle_text_input
     ))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP),
+    dp.add_handler(CallbackQueryHandler(handle_callback))
+
+    dp.add_handler(MessageHandler(
+        Filters.text & ~Filters.command & (Filters.group | Filters.supergroup),
         handle_group_message
     ))
-    application.add_handler(MessageHandler(
-        filters.Document.ALL & filters.ChatType.PRIVATE,
+    dp.add_handler(MessageHandler(
+        Filters.document & Filters.private,
         handle_document
     ))
 
-    # JobQueue для трекера бездействия
-    job_queue = application.job_queue
-    if job_queue:
-        job_queue.run_repeating(inactivity_checker, interval=86400, first=10)
-    else:
-        logging.warning("JobQueue не установлен. Установите python-telegram-bot[job-queue]")
+    # Запускаем фоновый поток для трекера бездействия
+    start_inactivity_thread(bot)
 
-    logging.info("Бот запущен в режиме polling...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("Бот запущен в режиме polling...")
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
