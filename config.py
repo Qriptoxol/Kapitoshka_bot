@@ -6,13 +6,11 @@ from datetime import datetime
 from database import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
-
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 STORAGE_CHANNEL_ID = int(os.environ.get("STORAGE_CHANNEL_ID", 0))
 CONFIG_FILE_ID_KEY = "config_file_id"
 
-# Админы из переменной окружения (через запятую)
-ADMINS_ENV = os.environ.get("BOT_ADMINS", "6890406250")
+ADMINS_ENV = os.environ.get("BOT_ADMINS", "")
 DEFAULT_ADMINS = [int(x.strip()) for x in ADMINS_ENV.split(",") if x.strip().isdigit()]
 
 DEFAULT_CONFIG = {
@@ -47,7 +45,6 @@ def load_config_from_channel(bot):
         except Exception as e:
             logger.error(f"Ошибка загрузки конфига: {e}")
 
-    # Создаём новый
     logger.warning("⚠️ Конфиг не найден. Создаю новый и отправляю в канал.")
     config = DEFAULT_CONFIG.copy()
     sent = bot.send_document(
