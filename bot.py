@@ -2,7 +2,7 @@ import os
 import logging
 import threading
 import time
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from config import load_config_from_channel
 from handlers import (
     start, reload_config, handle_menu_buttons, handle_text_input,
@@ -36,21 +36,21 @@ def main():
     dp.add_handler(CommandHandler("reload_config", reload_config))
 
     dp.add_handler(MessageHandler(
-        Filters.text & ~Filters.command & Filters.private,
+        filters.TEXT & ~filters.COMMAND & filters.PRIVATE,
         handle_menu_buttons
     ))
     dp.add_handler(MessageHandler(
-        Filters.text & ~Filters.command & Filters.private,
+        filters.TEXT & ~filters.COMMAND & filters.PRIVATE,
         handle_text_input
     ))
     dp.add_handler(CallbackQueryHandler(handle_callback))
 
     dp.add_handler(MessageHandler(
-        Filters.text & ~Filters.command & (Filters.group | Filters.supergroup),
+        filters.TEXT & ~filters.COMMAND & (filters.GROUP | filters.SUPERGROUP),
         handle_group_message
     ))
     dp.add_handler(MessageHandler(
-        Filters.document & Filters.private,
+        filters.DOCUMENT & filters.PRIVATE,
         handle_document
     ))
 
