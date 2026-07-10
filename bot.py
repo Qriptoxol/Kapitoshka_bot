@@ -14,15 +14,21 @@ from utils import send_inactive_warning
 logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-async def inactivity_checker(context):
-    result = get_inactive_users()
-    if "inactive" in result:
-        bot = context.bot
-        for uid in result["inactive"]:
-            try:
-                await send_inactive_warning(bot, uid)
-            except Exception as e:
-                logging.error(f"Не удалось отправить предупреждение {uid}: {e}")
+async def inactivity_checker(application):
+    """Фоновая задача: проверка бездействия каждые 24 часа."""
+    while True:
+        await asyncio.sleep(86400)  # 24 часа
+        try:
+            result = get_inactive_users()
+            if "inactive" in result:
+                bot = application.bot
+                for uid in result["inactive"]:
+                    try:
+                        await send_inactive_warning(bot, uid)
+                    except Exception as e:
+                        logging.error(f"Не удалось отправить предупреждение {uid}: {e}")
+        except Exception as e:
+            logging.error(f"Ошибка в трекере бездействия: {e}")
 
 async def init_app():
     """Асинхронная инициализация приложения и загрузка конфига."""
@@ -54,10 +60,9 @@ def main():
         handle_document
     ))
 
-    # Фоновая задача – трекер бездействия (раз в 24 часа)
-    job_queue = application.job_queue
-    if job_queue:
-        job_queue.run_repeating(inactivity_checker, interval=86400, first=10)
+    # Запускаем фоновую задачу для трекера бездействия (без JobQueue)
+    loop = asyncio.get_event_loop()
+    loop.create_task(inactivity_checker(application))
 
     logging.info("Бот запущен в режиме polling...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
