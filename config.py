@@ -1,15 +1,18 @@
 import os
 import json
-import aiohttp
-from datetime import datetime
 import asyncio
+import aiohttp
+import logging
+from datetime import datetime
 from database import get_setting, set_setting
+
+logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 STORAGE_CHANNEL_ID = int(os.environ.get("STORAGE_CHANNEL_ID", 0))
 CONFIG_FILE_ID_KEY = "config_file_id"
 
-# Получаем админов из переменной окружения
+# Админы из переменной окружения (через запятую)
 ADMINS_ENV = os.environ.get("BOT_ADMINS", "")
 DEFAULT_ADMINS = [int(x.strip()) for x in ADMINS_ENV.split(",") if x.strip().isdigit()]
 
@@ -28,18 +31,24 @@ _config_cache = None
 _config_last_update = None
 CACHE_TTL = 300
 
+async def aget_setting(key):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, get_setting, key)
+
+async def aset_setting(key, value):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, set_setting, key, value)
+
 async def load_config_from_channel(bot):
     global _config_cache, _config_last_update
 
-    # Получаем file_id из БД (синхронно через run_in_executor)
-    loop = asyncio.get_running_loop()
-    file_id = await loop.run_in_executor(None, get_setting, CONFIG_FILE_ID_KEY)
+    file_id = await aget_setting(CONFIG_FILE_ID_KEY)
+    logger.info(f"Загружаем file_id из БД: {file_id}")
 
     if file_id:
         try:
             file = await bot.get_file(file_id)
-            file_path = file.file_path
-            url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+            url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     if resp.status == 200:
@@ -47,15 +56,16 @@ async def load_config_from_channel(bot):
                         config = json.loads(text)
                         _config_cache = config
                         _config_last_update = datetime.now()
-                        print("✅ Конфиг загружен из канала")
+                        logger.info("✅ Конфиг успешно загружен из канала.")
                         return config
+                    else:
+                        logger.error(f"Не удалось скачать конфиг: {resp.status}")
         except Exception as e:
-            print(f"❌ Ошибка загрузки конфига: {e}")
+            logger.error(f"Ошибка загрузки конфига: {e}")
 
-    # Если не удалось загрузить – создаём новый
-    print("⚠️ Конфиг не найден. Создаю новый и отправляю в канал.")
+    # Если не загрузился – создаём новый
+    logger.warning("⚠️ Конфиг не найден. Создаю новый и отправляю в канал.")
     config = DEFAULT_CONFIG.copy()
-    # Отправляем документ
     sent = await bot.send_document(
         chat_id=STORAGE_CHANNEL_ID,
         document=json.dumps(config, indent=2).encode('utf-8'),
@@ -63,11 +73,12 @@ async def load_config_from_channel(bot):
         caption="Конфиг бота (автосозданный)"
     )
     file_id = sent.document.file_id
-    # Сохраняем file_id в БД
-    await loop.run_in_executor(None, set_setting, CONFIG_FILE_ID_KEY, file_id)
+    logger.info(f"✅ Конфиг сохранён в канале с file_id: {file_id}")
+    await aset_setting(CONFIG_FILE_ID_KEY, file_id)
+    logger.info("✅ file_id сохранён в БД.")
+
     _config_cache = config
     _config_last_update = datetime.now()
-    print(f"✅ Конфиг сохранён в канале с file_id: {file_id}")
     return config
 
 async def get_config(bot=None, force_reload=False):
